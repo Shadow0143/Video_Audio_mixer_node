@@ -53,7 +53,7 @@ async function addMusicToVideo(inputVideoPath, outputVideoPath, musicBuffer) {
     try {
 
         const randomNumber = Math.random();
-        const inputVideoPath = './video3.mp4';
+        const inputVideoPath = './video2.mp4';
         const audioBuffer = fs.readFileSync('./audio2.mp3'); // Read audio file into buffer
 
         console.log('audioBuffer =============',audioBuffer);
