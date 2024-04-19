@@ -1,40 +1,63 @@
-const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
-const ffmpeg = require('fluent-ffmpeg');
+const { spawn } = require('child_process');
+const fs = require('fs');
 
-async function addMusicToVideo(inputVideoUrl, outputVideoUrl, music) {
+async function addMusicToVideo(inputVideoPath, outputVideoPath, musicBuffer) {
     try {
+        const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
 
-        ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+        const ffmpegProcess = spawn(ffmpegPath, [
+            '-i', inputVideoPath,
+            '-i', 'pipe:0', // Use stdin for the audio input
+            '-map', '0:v', '-map', '1:a', // Keep video from input file and audio from the pipe
+            '-c:v', 'copy', // Copy video codec
+            '-c:a', 'aac', // Set audio codec to AAC
+            '-shortest',
+            outputVideoPath
+        ]);
 
-        return await new Promise((resolve, reject) => {
-            const ffmpegCommand = ffmpeg()
-                .input(inputVideoUrl)
-                .input(music)
-                .audioCodec('aac') // Or 'libvorbis', 'libmp3lame'
-                .toFormat('mp4')
-                .outputOptions('-shortest')
-                .on('end', resolve)
-                .on('error', (err) => {
-                    console.error('Error mixing audio and video:', err);
-                    reject(err);
-                })
-                .on('progress', (progress) => {
-                    console.log('Progress:', progress.percent);
-                });
-            ffmpegCommand.save(outputVideoUrl);
+        ffmpegProcess.stdin.on('error', (error) => {
+            if (error.code === 'EPIPE') {
+                // Ignore EPIPE error, it means FFmpeg finished reading from stdin
+            } else {
+                console.error('Error writing to FFmpeg stdin:', error);
+            }
+        });
+
+        ffmpegProcess.stderr.on('data', (data) => {
+            console.error(`FFmpeg stderr: ${data}`);
+        });
+
+        ffmpegProcess.stdin.write(musicBuffer);
+        ffmpegProcess.stdin.end();
+
+        return new Promise((resolve, reject) => {
+            ffmpegProcess.on('exit', (code, signal) => {
+                if (code === 0) {
+                    resolve();
+                } else {
+                    reject(new Error(`FFmpeg process exited with code ${code} and signal ${signal}`));
+                }
+            });
+
+            ffmpegProcess.on('error', (error) => {
+                reject(error);
+            });
         });
     } catch (error) {
-        console.error('Error during FFmpeg installation or execution:', error);
+        console.error('Error during FFmpeg execution:', error);
         throw error;
     }
 }
 
 (async () => {
     try {
-        const inputVideoUrl = './video2.mp4';
-        const audioUrl = './audio.mp3';
-        const videoWithMusic = await addMusicToVideo(inputVideoUrl, 'outputWithSound.mp4', audioUrl);
-        console.log('Video with music created:', videoWithMusic);
+
+        const randomNumber = Math.random();
+        const inputVideoPath = './video3.mp4';
+        const audioBuffer = fs.readFileSync('./audio2.mp3'); // Read audio file into buffer
+
+        console.log('audioBuffer =============',audioBuffer);
+        await addMusicToVideo(inputVideoPath, `outputWithSound + ${randomNumber}.mp4`, audioBuffer);
     } catch (error) {
         console.error('Error during video processing:', error);
     }
